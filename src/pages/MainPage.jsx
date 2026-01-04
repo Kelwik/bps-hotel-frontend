@@ -1,13 +1,11 @@
 import { Navigate } from 'react-router';
+import LogoutButton from '../components/LogoutButton';
 
 function MainPage() {
-  const user = false;
-  if (!user) {
-    return <Navigate to={'/login'} replace />;
-  }
   return (
     <>
       <h1>This is the main page</h1>
+      <LogoutButton />
     </>
   );
 }
