@@ -43,7 +43,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url.endsWith('/auth/refresh')
+    ) {
       originalRequest.retry = false;
 
       if (isRefreshing) {
