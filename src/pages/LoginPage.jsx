@@ -14,9 +14,15 @@ const LoginPage = () => {
   // React Query Logic
   const mutation = useMutation({
     mutationFn: ({ username, password }) => login(username, password),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['me'] });
-      navigate('/');
+    onSuccess: async () => {
+      // FIX: Use resetQueries instead of invalidateQueries.
+      // This clears any cached "Error" state immediately, forcing the
+      // ProtectedRoute to show the 'Loading' spinner instead of
+      // redirecting back to login immediately.
+      await queryClient.resetQueries({ queryKey: ['me'] });
+
+      // Navigate using 'replace' to prevent back-button loops
+      navigate('/', { replace: true });
     },
   });
 
@@ -29,7 +35,6 @@ const LoginPage = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Pass formData to the mutation
     mutation.mutate({
       username: formData.username,
       password: formData.password,
@@ -57,7 +62,7 @@ const LoginPage = () => {
             {/* Logo Placeholder */}
             <div className="w-14 h-14 p-1 shrink-0 flex items-center justify-center ">
               <img
-                src="/public/LogoBps.svg"
+                src="/LogoBps.svg"
                 alt="logo"
                 className="w-full h-full object-contain"
               />

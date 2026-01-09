@@ -5,9 +5,11 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { tokenStore } from './token';
+import DashboardLayout from './layouts/DashboardLayout';
+import LoadingSpinner from './components/LoadingSpinner';
 
 function App() {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
     async function refresh() {
       try {
@@ -24,7 +26,7 @@ function App() {
   }, []);
 
   if (isLoading) {
-    return <h1>Loading....</h1>;
+    return <LoadingSpinner />;
   }
   return (
     <BrowserRouter>
@@ -33,10 +35,15 @@ function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <MainPage />
+              <DashboardLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route path="/" element={<MainPage />} />
+          <Route path="/tabel" element={<MainPage />} />
+          <Route path="/hotel" element={<MainPage />} />
+          <Route path="/input" element={<MainPage />} />
+        </Route>
         <Route path="/login" element={<LoginPage />} />
       </Routes>
     </BrowserRouter>
