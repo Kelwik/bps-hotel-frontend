@@ -1,1 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 @import 'tailwindcss';
+
+@theme {
+  --font-inter: 'Inter', sans-serif;
+  --font-lato: 'Lato', sans-serif;
+
+  /* Make Inter the default sans font */
+  --font-sans: var(--font-inter);
+
+  /* OFFICIAL BPS LOGO PALETTE */
+  --color-bpsBlue-dark: #002b6a; /* Background */
+  --color-bpsBlue: #005f9e; /* Primary Buttons/Links */
+  --color-bpsBlue-light: #007bff; /* Accents */
+
+  --color-bpsOrange: #fa9d1c; /* The Orange "Triangle" in BPS logo */
+  --color-bpsGreen: #7aac2f; /* The Green "Triangle" in BPS logo */
+
+  /* UTILITIES */
+  --color-danger-light: #fef2f2;
+  --color-danger: #dc2626;
+  --color-danger-dark: #b91c1c;
+
+  --color-success-light: #f0fdf4;
+  --color-success: #16a34a;
+  --color-success-dark: #15803d;
+}
+
+body {
+  font-family: var(--font-inter);
+}
