@@ -7,7 +7,6 @@ function MainPage() {
     queryKey: ['hotels'],
     queryFn: () => api.get('/hotels').then((res) => res.data),
   });
-  console.log(hotels);
 
   return (
     <>

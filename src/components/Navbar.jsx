@@ -1,7 +1,12 @@
-import { CircleUser } from 'lucide-react';
+import { useState } from 'react';
+import { CircleUser, Menu, X } from 'lucide-react';
 import { NavLink } from 'react-router';
+import { useMe } from '../hooks/useMe';
 
 const Navbar = () => {
+  const { data } = useMe();
+  const [isOpen, setIsOpen] = useState(false);
+
   const navItems = [
     { name: 'Dashboard', route: '/' },
     { name: 'Tabel Dinamis', route: '/tabel' },
@@ -10,65 +15,54 @@ const Navbar = () => {
   ];
 
   return (
-    <div className="w-full">
-      {/* Light blue effect */}
-      <nav className="bg-[#0093DD] text-white pb-2 shadow-md rounded-bl-[55px] relative overflow-visible">
-        {/* Nav Container */}
-        <div className="w-full rounded-bl-[60px] bg-[#183683] relative p-4 pr-28 flex items-center justify-between overflow-visible">
-          {/* Left side */}
-          <div className="flex ml-4 items-center gap-2">
-            <div className="w-14 h-14 p-1 shrink-0 flex items-center justify-center">
-              <img
-                src="/LogoBps.svg"
-                alt="Logo BPS"
-                className="object-contain"
-              />
+    <div className="w-full relative z-50">
+      {/* Decorative Background Layer 
+        This creates the "Light Blue" bottom border effect without extra divs 
+      */}
+      <div className="bg-[#0093DD] pb-2 rounded-bl-[30px] md:rounded-bl-[60px] shadow-md transition-all duration-300">
+        {/* Main Navbar Container */}
+        <nav className="bg-[#183683] w-full rounded-bl-[35px] md:rounded-bl-[65px] px-4 md:px-8 relative">
+          <div className="flex items-center justify-between h-20 md:h-24">
+            {/* --- LEFT: Logo --- */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center p-1">
+                <img
+                  src="/LogoBps.svg"
+                  alt="Logo BPS"
+                  className="object-contain w-full h-full"
+                />
+              </div>
+              <h1 className="font-bold text-xl md:text-2xl italic text-white leading-tight">
+                VHTS <span className="text-orange-500">ONLINE</span>
+              </h1>
             </div>
 
-            <h1 className="font-bold text-3xl italic">
-              VHTS <span className="text-bpsOrange">ONLINE</span>
-            </h1>
-          </div>
-
-          {/* Right side */}
-          <div className="flex gap-12 items-center">
-            {/* Nav items */}
-            <div className="flex gap-9 overflow-visible">
+            {/* --- MIDDLE: Desktop Navigation (Hidden on Mobile) --- */}
+            <div className="hidden md:flex items-center h-full gap-8">
               {navItems.map((item) => (
                 <NavLink
                   key={item.route}
                   to={item.route}
                   end={item.route === '/'}
-                  className="relative px-5 py-2 text-md overflow-visible font-montserrat font-medium"
+                  className="relative h-full flex items-center px-2 group"
                 >
                   {({ isActive }) => (
                     <>
-                      {/* Text */}
                       <span
-                        className={`relative z-30 transition ${
+                        className={`text-sm lg:text-md font-montserrat font-medium transition-colors duration-200 ${
                           isActive
-                            ? 'font-semibold text-white'
-                            : 'text-white/80 hover:text-white'
+                            ? 'text-white font-bold'
+                            : 'text-white/70 group-hover:text-white'
                         }`}
                       >
                         {item.name}
                       </span>
 
-                      {/* Active pill */}
+                      {/* Active Indicator (The Pill) 
+                          Positioned at bottom-0 relative to the h-full container 
+                      */}
                       {isActive && (
-                        <span
-                          className="
-                            absolute
-                            left-1/2
-                            -translate-x-1/2
-                            bottom-[-24px]
-                            h-1.5
-                            w-32
-                            rounded-t-full
-                            bg-white
-                            z-20
-                          "
-                        />
+                        <span className="absolute bottom-0 left-0 right-0 h-1.5 bg-white rounded-t-full w-full mx-auto animate-fadeIn" />
                       )}
                     </>
                   )}
@@ -76,14 +70,58 @@ const Navbar = () => {
               ))}
             </div>
 
-            {/* Account info */}
-            <div className="flex gap-2 items-center">
-              <CircleUser />
-              <div>Ka Firli</div>
+            {/* --- RIGHT: User Profile & Mobile Toggle --- */}
+            <div className="flex items-center gap-4">
+              {/* Profile (Desktop Only for layout balance, or keep on mobile if needed) */}
+              <div className="hidden md:flex items-center gap-3 text-white">
+                <div className="text-right">
+                  <div className="text-xs opacity-70">Welcome,</div>
+                  <div className="text-sm font-semibold">{data.username}</div>
+                </div>
+                <CircleUser className="w-8 h-8" />
+              </div>
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="md:hidden text-white p-1 hover:bg-white/10 rounded-md transition"
+              >
+                {isOpen ? <X size={28} /> : <Menu size={28} />}
+              </button>
             </div>
           </div>
-        </div>
-      </nav>
+
+          {/* --- MOBILE MENU DROPDOWN --- */}
+          {/* Animated height or conditional rendering */}
+          {isOpen && (
+            <div className="md:hidden border-t border-white/10 py-4 space-y-2 animate-in slide-in-from-top-2">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.route}
+                  to={item.route}
+                  end={item.route === '/'}
+                  onClick={() => setIsOpen(false)} // Close menu on click
+                  className={({ isActive }) =>
+                    `block px-4 py-3 rounded-lg text-white font-medium transition-colors ${
+                      isActive
+                        ? 'bg-white/20 font-bold border-l-4 border-orange-500'
+                        : 'hover:bg-white/10 text-white/80'
+                    }`
+                  }
+                >
+                  {item.name}
+                </NavLink>
+              ))}
+
+              {/* Mobile User Profile Info */}
+              <div className="border-t border-white/10 mt-4 pt-4 px-4 flex items-center gap-3 text-white/90">
+                <CircleUser className="w-8 h-8" />
+                <span>{data.username}</span>
+              </div>
+            </div>
+          )}
+        </nav>
+      </div>
     </div>
   );
 };
