@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import EntryTable from '../components/EntryTable';
 import { Save, Building2, Calendar, Loader2 } from 'lucide-react';
@@ -10,18 +10,33 @@ function InputPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [reportData, setReportData] = useState([]);
 
-  // Fetch Hotels for Dropdown
+  const queryClient = useQueryClient();
+
+  // 1. Fetch Hotels for Dropdown
   const { data: hotels, isLoading: isLoadingHotels } = useQuery({
     queryKey: ['hotels'],
     queryFn: () => api.get('/hotels').then((res) => res.data),
   });
 
-  // Mutation to Save Data
+  // 2. Fetch Existing Report Data (GET /laporan/:hotelId?month=X&year=Y)
+  const { data: existingData, isLoading: isLoadingReport } = useQuery({
+    queryKey: ['report', selectedHotelId, month, year],
+    queryFn: () =>
+      api
+        .get(`/laporan/${selectedHotelId}`, { params: { month, year } })
+        .then((res) => res.data),
+    enabled: !!selectedHotelId, // Only fetch if a hotel is selected
+    retry: false, // Don't retry if 404 or empty, just show blank table
+  });
+
+  // 3. Mutation to Save Data
   const saveMutation = useMutation({
     mutationFn: (data) =>
       api.post(`/laporan/${selectedHotelId}`, { laporanBulanan: data }),
     onSuccess: () => {
       alert('Report saved successfully!');
+      // Invalidate cache so it refetches the fresh data
+      queryClient.invalidateQueries(['report', selectedHotelId, month, year]);
     },
     onError: (err) => {
       console.error(err);
@@ -37,7 +52,8 @@ function InputPage() {
 
     // Transform calculated table data into API payload format
     const payload = reportData.map((row) => ({
-      tanggal_laporan: new Date(Date.UTC(year, month, row.date)).toISOString(), // Use UTC to avoid timezone shifts
+      // Use UTC to ensure the date stored in DB matches the day selected
+      tanggal_laporan: new Date(Date.UTC(year, month, row.date)).toISOString(),
 
       // Room Data
       kamar_checkin: row.roomsIn,
@@ -157,7 +173,18 @@ function InputPage() {
 
       {/* --- Main Table Component --- */}
       {selectedHotelId ? (
-        <EntryTable month={month} year={year} onDataChange={setReportData} />
+        isLoadingReport ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          </div>
+        ) : (
+          <EntryTable
+            month={month}
+            year={year}
+            onDataChange={setReportData}
+            existingData={existingData}
+          />
+        )
       ) : (
         <div className="text-center py-20 bg-slate-50 rounded-lg border border-dashed border-slate-300">
           <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />

@@ -6,10 +6,11 @@ const getDaysInMonth = (month, year) => {
   return new Date(year, month + 1, 0).getDate();
 };
 
-const EntryTable = ({ month, year, onDataChange }) => {
+const EntryTable = ({ month, year, onDataChange, existingData }) => {
   // Track previous props to detect changes during render
   const [prevMonth, setPrevMonth] = useState(month);
   const [prevYear, setPrevYear] = useState(year);
+  const [prevExistingData, setPrevExistingData] = useState(null);
 
   const [initialValues, setInitialValues] = useState({
     rooms: 0,
@@ -30,27 +31,79 @@ const EntryTable = ({ month, year, onDataChange }) => {
   );
 
   // --- ADJUST STATE DURING RENDER PATTERN ---
-  // Replaces the useEffect that caused lint errors.
-  if (month !== prevMonth || year !== prevYear) {
+  // If inputs change (month/year) OR we receive new data from backend
+  if (
+    month !== prevMonth ||
+    year !== prevYear ||
+    existingData !== prevExistingData
+  ) {
     const newDays = getDaysInMonth(month, year);
 
+    // 1. Prepare blank movements
+    let newMovements = Array.from({ length: newDays }, () => ({
+      roomsIn: 0,
+      roomsOut: 0,
+      foreignIn: 0,
+      foreignOut: 0,
+      localIn: 0,
+      localOut: 0,
+    }));
+
+    // 2. Prepare default initial values (start of month)
+    let newInitialValues = { rooms: 0, foreign: 0, local: 0 };
+
+    // 3. Fill with existing data if available
+    if (
+      existingData &&
+      Array.isArray(existingData) &&
+      existingData.length > 0
+    ) {
+      existingData.forEach((record) => {
+        // Parse date from DB string
+        const dateObj = new Date(record.tanggal_laporan);
+        const dayIndex = dateObj.getUTCDate() - 1; // 0-indexed
+
+        if (dayIndex >= 0 && dayIndex < newDays) {
+          newMovements[dayIndex] = {
+            roomsIn: record.kamar_checkin,
+            roomsOut: record.kamar_checkout,
+            foreignIn: record.pengunjung_international_checkin,
+            foreignOut: record.pengunjung_international_checkout,
+            localIn: record.pengunjung_lokal_checkin,
+            localOut: record.pengunjung_lokal_checkout,
+          };
+        }
+      });
+
+      // 4. Reverse calculate "Initial" (Yesterday of Day 1)
+      // Logic: Today = Yesterday + In - Out
+      // Therefore: Yesterday = Today - In + Out
+      const day1 = existingData.find(
+        (d) => new Date(d.tanggal_laporan).getUTCDate() === 1
+      );
+
+      if (day1) {
+        newInitialValues = {
+          rooms:
+            day1.kamar_ditempati - day1.kamar_checkin + day1.kamar_checkout,
+          foreign:
+            day1.pengunjung_international_menetap -
+            day1.pengunjung_international_checkin +
+            day1.pengunjung_international_checkout,
+          local:
+            day1.pengunjung_lokal_menetap -
+            day1.pengunjung_lokal_checkin +
+            day1.pengunjung_lokal_checkout,
+        };
+      }
+    }
+
+    // Update state synchronously to avoid flash
     setPrevMonth(month);
     setPrevYear(year);
-
-    setMovements((prev) => {
-      return Array.from(
-        { length: newDays },
-        (_, i) =>
-          prev[i] || {
-            roomsIn: 0,
-            roomsOut: 0,
-            foreignIn: 0,
-            foreignOut: 0,
-            localIn: 0,
-            localOut: 0,
-          }
-      );
-    });
+    setPrevExistingData(existingData);
+    setMovements(newMovements);
+    setInitialValues(newInitialValues);
   }
 
   // Handle Input Changes
@@ -77,7 +130,6 @@ const EntryTable = ({ month, year, onDataChange }) => {
     let currentForeign = initialValues.foreign;
     let currentLocal = initialValues.local;
 
-    // Use loop to avoid side-effects in .map
     for (let i = 0; i < movements.length; i++) {
       const move = movements[i];
 

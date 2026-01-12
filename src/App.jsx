@@ -9,6 +9,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import LoadingSpinner from './components/LoadingSpinner';
 import HotelPage from './pages/HotelPage';
 import InputPage from './pages/InputPage';
+import TabelDinamisPage from './pages/TabelDinamis';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -42,7 +43,7 @@ function App() {
           }
         >
           <Route path="/" element={<MainPage />} />
-          <Route path="/tabel" element={<MainPage />} />
+          <Route path="/tabel" element={<TabelDinamisPage />} />
           <Route path="/hotel" element={<HotelPage />} />
           <Route path="/input" element={<InputPage />} />
         </Route>
