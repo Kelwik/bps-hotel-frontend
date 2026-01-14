@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import {
@@ -6,7 +6,6 @@ import {
   Trash2,
   RotateCcw,
   Download,
-  ChevronDown,
   Loader2,
 } from 'lucide-react';
 
@@ -33,113 +32,31 @@ function TabelDinamisPage() {
   const YEARS = [2024, 2025, 2026];
 
   // --- DATA FETCHING ---
-  // Fetch ALL hotels to get metadata (names, kecamatan)
-  const { data: hotels = [] } = useQuery({
-    queryKey: ['hotels'],
-    queryFn: () => api.get('/hotels').then((res) => res.data),
-  });
 
-  // Fetch ALL reports (For a real app, you might want to filter this by year in the API)
-  const { data: rawReports = [], isLoading } = useQuery({
-    queryKey: ['all-reports'],
+  // 1. Fetch Aggregated Stats from Backend
+  const {
+    data: tableData = [],
+    isLoading,
+    isFetching,
+    error,
+  } = useQuery({
+    queryKey: ['stats', selectedIndicator, selectedYears, selectedRowHeader],
     queryFn: async () => {
-      // We need to fetch reports for all hotels.
-      // Assuming we can pass a query param or loop through hotels.
-      // For this prototype, let's assume getting data for the selected years via a new endpoint or loop.
-      // Ideally: api.get('/laporan/aggregate?year=2024,2025')
+      // Guard clause to prevent fetching with invalid params
+      if (!selectedIndicator || selectedYears.length === 0) return [];
 
-      // MOCKING DATA LOGIC for demonstration if backend doesn't support aggregate yet:
-      const promises = hotels.map((h) =>
-        api
-          .get(
-            `/laporan/${h.hotel_id}?month=0&year=${new Date().getFullYear()}`
-          ) // Fetching some sample
-          .catch(() => ({ data: [] }))
-      );
-      // In production, please add `exports.getAllReports` to your backend ReportController
-      return [];
+      const response = await api.get('/laporan/stats', {
+        params: {
+          indicator: selectedIndicator,
+          groupBy: selectedRowHeader,
+          years: selectedYears.join(','),
+        },
+      });
+      return response.data;
     },
-    enabled: hotels.length > 0,
+    enabled: isSubmitted, // Only fetch after user clicks Submit
+    keepPreviousData: true, // Keep showing old data while fetching new params (optional)
   });
-
-  // --- AGGREGATION LOGIC (The "Dynamic" Part) ---
-  const tableData = useMemo(() => {
-    if (!isSubmitted || !selectedIndicator) return null;
-
-    // This is where we would normally process 'rawReports'.
-    // Since we don't have the full raw data in this chat context,
-    // I will generate realistic MOCK data based on the selection to show the UI behavior.
-
-    let rows = [];
-
-    if (selectedRowHeader === 'hotel') {
-      rows = hotels.map((h) => ({
-        label: h.nama_hotel,
-        values: selectedYears.reduce((acc, year) => {
-          // Mock random logic based on indicator
-          acc[year] =
-            selectedIndicator === 'tpk'
-              ? (Math.random() * 40 + 40).toFixed(2)
-              : selectedIndicator === 'tamu_total'
-              ? Math.floor(Math.random() * 500 + 100)
-              : (Math.random() * 2 + 1).toFixed(2);
-          return acc;
-        }, {}),
-      }));
-    } else if (selectedRowHeader === 'month') {
-      const months = [
-        'Januari',
-        'Februari',
-        'Maret',
-        'April',
-        'Mei',
-        'Juni',
-        'Juli',
-        'Agustus',
-        'September',
-        'Oktober',
-        'November',
-        'Desember',
-      ];
-      rows = months.map((m) => ({
-        label: m,
-        values: selectedYears.reduce((acc, year) => {
-          acc[year] =
-            selectedIndicator === 'tpk'
-              ? (Math.random() * 40 + 40).toFixed(2)
-              : selectedIndicator === 'tamu_total'
-              ? Math.floor(Math.random() * 1000 + 200)
-              : (Math.random() * 2 + 1).toFixed(2);
-          return acc;
-        }, {}),
-      }));
-    } else if (selectedRowHeader === 'kecamatan') {
-      const kecamatans = [...new Set(hotels.map((h) => h.kecamatan))].filter(
-        Boolean
-      );
-      if (kecamatans.length === 0) kecamatans.push('Pariwari', 'Fakfak Kota'); // Fallback
-      rows = kecamatans.map((k) => ({
-        label: k,
-        values: selectedYears.reduce((acc, year) => {
-          acc[year] =
-            selectedIndicator === 'tpk'
-              ? (Math.random() * 40 + 40).toFixed(2)
-              : selectedIndicator === 'tamu_total'
-              ? Math.floor(Math.random() * 2000 + 500)
-              : (Math.random() * 2 + 1).toFixed(2);
-          return acc;
-        }, {}),
-      }));
-    }
-
-    return rows;
-  }, [
-    isSubmitted,
-    selectedIndicator,
-    selectedYears,
-    selectedRowHeader,
-    hotels,
-  ]);
 
   // --- HANDLERS ---
   const toggleYear = (year) => {
@@ -163,6 +80,7 @@ function TabelDinamisPage() {
       alert('Please select an Indicator and at least one Year.');
       return;
     }
+    // Setting this to true enables the query
     setIsSubmitted(true);
   };
 
@@ -319,10 +237,18 @@ function TabelDinamisPage() {
         <div className="flex justify-center gap-3 pt-2">
           <button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!selectedIndicator || selectedYears.length === 0}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            disabled={
+              !selectedIndicator ||
+              selectedYears.length === 0 ||
+              isLoading ||
+              isFetching
+            }
           >
-            Submit
+            {(isLoading || isFetching) && (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            )}
+            {isLoading || isFetching ? 'Memuat Data...' : 'Submit'}
           </button>
           <button
             type="button"
@@ -335,96 +261,123 @@ function TabelDinamisPage() {
       </form>
 
       {/* --- RESULT SECTION --- */}
-      {isSubmitted && tableData && (
+      {isSubmitted && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Controls */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                <span className="ml-2 text-sm font-medium text-slate-700">
-                  Freeze Judul
-                </span>
-              </label>
+          {error && (
+            <div className="bg-red-50 text-red-700 p-4 rounded-md text-sm border border-red-200">
+              Gagal memuat data. Silakan coba lagi.
             </div>
-            <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
-              <Download className="w-4 h-4" /> Unduh Excel
-            </button>
-          </div>
+          )}
+
+          {/* Controls */}
+          {!error && (
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className="ml-2 text-sm font-medium text-slate-700">
+                    Freeze Judul
+                  </span>
+                </label>
+              </div>
+              <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                <Download className="w-4 h-4" /> Unduh Excel
+              </button>
+            </div>
+          )}
 
           {/* Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-slate-300 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left border-collapse">
-                <thead className="bg-slate-800 text-white">
-                  <tr>
-                    <th
-                      rowSpan="2"
-                      className="px-6 py-4 border-r border-slate-600 font-semibold w-1/3"
-                    >
-                      {
-                        ROW_HEADERS.find((r) => r.id === selectedRowHeader)
-                          ?.label
-                      }
-                    </th>
-                    <th
-                      colSpan={selectedYears.length}
-                      className="px-6 py-3 border-b border-slate-600 text-center font-semibold bg-slate-900"
-                    >
-                      {
-                        INDICATORS.find((i) => i.id === selectedIndicator)
-                          ?.label
-                      }
-                    </th>
-                  </tr>
-                  <tr>
-                    {selectedYears.map((year) => (
+          {!error && (
+            <div className="bg-white rounded-lg shadow-sm border border-slate-300 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left border-collapse">
+                  <thead className="bg-slate-800 text-white">
+                    <tr>
                       <th
-                        key={year}
-                        className="px-6 py-3 border-r border-slate-600 text-center last:border-0 bg-slate-800"
+                        rowSpan="2"
+                        className="px-6 py-4 border-r border-slate-600 font-semibold w-1/3"
                       >
-                        {year}
+                        {
+                          ROW_HEADERS.find((r) => r.id === selectedRowHeader)
+                            ?.label
+                        }
                       </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {tableData.map((row, idx) => (
-                    <tr
-                      key={idx}
-                      className="hover:bg-slate-50 transition-colors group"
-                    >
-                      <td className="px-6 py-3 font-medium text-slate-900 bg-slate-50 group-hover:bg-slate-100 border-r border-slate-200">
-                        {row.label}
-                      </td>
+                      <th
+                        colSpan={selectedYears.length}
+                        className="px-6 py-3 border-b border-slate-600 text-center font-semibold bg-slate-900"
+                      >
+                        {
+                          INDICATORS.find((i) => i.id === selectedIndicator)
+                            ?.label
+                        }
+                      </th>
+                    </tr>
+                    <tr>
                       {selectedYears.map((year) => (
-                        <td
+                        <th
                           key={year}
-                          className="px-6 py-3 text-center text-slate-600"
+                          className="px-6 py-3 border-r border-slate-600 text-center last:border-0 bg-slate-800"
                         >
-                          {row.values[year] ? row.values[year] : '-'}
-                        </td>
+                          {year}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                  {tableData.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={selectedYears.length + 1}
-                        className="p-8 text-center text-slate-500"
-                      >
-                        Tidak ada data untuk kombinasi yang dipilih.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {tableData.length > 0
+                      ? tableData.map((row, idx) => (
+                          <tr
+                            key={idx}
+                            className="hover:bg-slate-50 transition-colors group"
+                          >
+                            <td className="px-6 py-3 font-medium text-slate-900 bg-slate-50 group-hover:bg-slate-100 border-r border-slate-200">
+                              {row.label}
+                            </td>
+                            {selectedYears.map((year) => (
+                              <td
+                                key={year}
+                                className="px-6 py-3 text-center text-slate-600"
+                              >
+                                {/* Check if value exists, otherwise show strip */}
+                                {row.values[year] !== undefined &&
+                                row.values[year] !== null
+                                  ? row.values[year]
+                                  : '-'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      : !isLoading &&
+                        !isFetching && (
+                          <tr>
+                            <td
+                              colSpan={selectedYears.length + 1}
+                              className="p-8 text-center text-slate-500"
+                            >
+                              Tidak ada data untuk kombinasi yang dipilih.
+                            </td>
+                          </tr>
+                        )}
+                    {(isLoading || isFetching) && tableData.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={selectedYears.length + 1}
+                          className="p-12 text-center"
+                        >
+                          <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-2" />
+                          <p className="text-slate-500">Mengambil data...</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="text-xs text-slate-500 italic mt-2">
-            * Data dihitung secara real-time berdasarkan laporan yang masuk.
+            * Data dihitung secara real-time dari database.
           </div>
         </div>
       )}
