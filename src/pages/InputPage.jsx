@@ -2,7 +2,35 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import EntryTable from '../components/EntryTable';
-import { Save, Building2, Calendar, Loader2 } from 'lucide-react';
+import StatusModal from '../components/StatusModal';
+import {
+  Save,
+  Building2,
+  Calendar,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  BedDouble,
+  DoorOpen,
+  Banknote,
+  Info,
+} from 'lucide-react';
+
+// Daftar nama bulan dalam Bahasa Indonesia
+const INDONESIAN_MONTHS = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
 
 function InputPage() {
   const [selectedHotelId, setSelectedHotelId] = useState('');
@@ -10,62 +38,85 @@ function InputPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [reportData, setReportData] = useState([]);
 
+  // State untuk Accordion Info Hotel
+  const [isHotelInfoOpen, setIsHotelInfoOpen] = useState(false);
+
+  // State untuk Modal Notifikasi
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: '',
+  });
+
   const queryClient = useQueryClient();
 
-  // 1. Fetch Hotels for Dropdown
+  // 1. Ambil Data Hotel
   const { data: hotels, isLoading: isLoadingHotels } = useQuery({
     queryKey: ['hotels'],
     queryFn: () => api.get('/hotels').then((res) => res.data),
   });
 
-  // 2. Fetch Existing Report Data (GET /laporan/:hotelId?month=X&year=Y)
+  // Helper: Cari data hotel yang sedang dipilih
+  const selectedHotel = hotels?.find(
+    (h) => h.hotel_id === parseInt(selectedHotelId)
+  );
+
+  // 2. Ambil Data Laporan
   const { data: existingData, isLoading: isLoadingReport } = useQuery({
     queryKey: ['report', selectedHotelId, month, year],
     queryFn: () =>
       api
         .get(`/laporan/${selectedHotelId}`, { params: { month, year } })
         .then((res) => res.data),
-    enabled: !!selectedHotelId, // Only fetch if a hotel is selected
-    retry: false, // Don't retry if 404 or empty, just show blank table
+    enabled: !!selectedHotelId,
+    retry: false,
   });
 
-  // 3. Mutation to Save Data
+  // 3. Mutasi Simpan
   const saveMutation = useMutation({
     mutationFn: (data) =>
       api.post(`/laporan/${selectedHotelId}`, { laporanBulanan: data }),
     onSuccess: () => {
-      alert('Report saved successfully!');
-      // Invalidate cache so it refetches the fresh data
+      setModalState({
+        isOpen: true,
+        type: 'success',
+        title: 'Berhasil Disimpan',
+        message: 'Data laporan bulanan berhasil disimpan ke sistem.',
+      });
       queryClient.invalidateQueries(['report', selectedHotelId, month, year]);
     },
     onError: (err) => {
       console.error(err);
-      alert(
-        'Failed to save report: ' + (err.response?.data?.message || err.message)
-      );
+      setModalState({
+        isOpen: true,
+        type: 'error',
+        title: 'Gagal Menyimpan',
+        message:
+          err.response?.data?.message || 'Terjadi kesalahan pada server.',
+      });
     },
   });
 
-  // Handle Form Submission
   const handleSave = () => {
-    if (!selectedHotelId) return alert('Please select a hotel first.');
+    if (!selectedHotelId) {
+      setModalState({
+        isOpen: true,
+        type: 'warning',
+        title: 'Hotel Belum Dipilih',
+        message: 'Silakan pilih hotel terlebih dahulu.',
+      });
+      return;
+    }
 
-    // Transform calculated table data into API payload format
     const payload = reportData.map((row) => ({
-      // Use UTC to ensure the date stored in DB matches the day selected
       tanggal_laporan: new Date(Date.UTC(year, month, row.date)).toISOString(),
-
-      // Room Data
       kamar_checkin: row.roomsIn,
       kamar_checkout: row.roomsOut,
       kamar_ditempati: row.todayRooms,
-
-      // International Guests
       pengunjung_international_checkin: row.foreignIn,
       pengunjung_international_checkout: row.foreignOut,
       pengunjung_international_menetap: row.todayForeign,
-
-      // Local Guests
       pengunjung_lokal_checkin: row.localIn,
       pengunjung_lokal_checkout: row.localOut,
       pengunjung_lokal_menetap: row.todayLocal,
@@ -74,125 +125,254 @@ function InputPage() {
     saveMutation.mutate(payload);
   };
 
+  const closeModal = () => setModalState({ ...modalState, isOpen: false });
+
+  // Formatter Rupiah
+  const formatRupiah = (price) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(price);
+  };
+
   if (isLoadingHotels)
     return (
       <div className="flex justify-center p-10 font-montserrat">
-        <Loader2 className="animate-spin" />
+        <Loader2 className="animate-spin text-blue-600" />
       </div>
     );
 
   return (
-    <div className="space-y-6 font-montserrat">
-      {/* --- Page Header & Controls --- */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-100">
+    <div className="space-y-6 font-montserrat pb-20">
+      <StatusModal
+        isOpen={modalState.isOpen}
+        onClose={closeModal}
+        type={modalState.type}
+        title={modalState.title}
+        message={modalState.message}
+      />
+
+      {/* --- Header & Kontrol Utama --- */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">
-              Monthly Entry Input
+              Input Data Bulanan
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              Manage daily hotel statistics for VHTS.
+              Kelola statistik harian hotel untuk VHTS.
             </p>
           </div>
 
           <button
             onClick={handleSave}
             disabled={saveMutation.isPending || !selectedHotelId}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saveMutation.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Save className="w-4 h-4" />
             )}
-            Save Data
+            Simpan Data
           </button>
         </div>
 
-        {/* --- Filters / Selectors --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-          {/* Hotel Selector */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+        {/* --- Filters --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
               <Building2 className="w-4 h-4 text-slate-400" />
-              Select Hotel
+              Pilih Hotel
             </label>
-            <select
-              value={selectedHotelId}
-              onChange={(e) => setSelectedHotelId(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-            >
-              <option value="">-- Choose a Hotel --</option>
-              {hotels?.map((hotel) => (
-                <option key={hotel.hotel_id} value={hotel.hotel_id}>
-                  {hotel.nama_hotel}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={selectedHotelId}
+                onChange={(e) => setSelectedHotelId(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
+              >
+                <option value="">-- Pilih Hotel --</option>
+                {hotels?.map((hotel) => (
+                  <option key={hotel.hotel_id} value={hotel.hotel_id}>
+                    {hotel.nama_hotel}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            </div>
           </div>
 
-          {/* Month Selector */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-slate-400" />
-              Month
+              Bulan
             </label>
-            <select
-              value={month}
-              onChange={(e) => setMonth(parseInt(e.target.value))}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            >
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i} value={i}>
-                  {new Date(0, i).toLocaleString('default', { month: 'long' })}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={month}
+                onChange={(e) => setMonth(parseInt(e.target.value))}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
+              >
+                {INDONESIAN_MONTHS.map((namaBulan, i) => (
+                  <option key={i} value={i}>
+                    {namaBulan}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            </div>
           </div>
 
-          {/* Year Selector */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-slate-400" />
-              Year
+              Tahun
             </label>
-            <select
-              value={year}
-              onChange={(e) => setYear(parseInt(e.target.value))}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            >
-              {[2024, 2025, 2026].map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value))}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
+              >
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* --- Main Table Component --- */}
+      {/* --- ACCORDION INFO HOTEL --- */}
+      {selectedHotel && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+          <button
+            onClick={() => setIsHotelInfoOpen(!isHotelInfoOpen)}
+            className="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                <Info className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm">
+                  Detail Hotel: {selectedHotel.nama_hotel}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Klik untuk melihat total kamar, tempat tidur, dan daftar
+                  harga.
+                </p>
+              </div>
+            </div>
+            {isHotelInfoOpen ? (
+              <ChevronUp className="w-5 h-5 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-slate-400" />
+            )}
+          </button>
+
+          {isHotelInfoOpen && (
+            <div className="p-5 border-t border-slate-200 bg-white">
+              {/* Statistik Ringkas */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <span className="text-xs text-blue-600 font-medium flex items-center gap-1 mb-1">
+                    <DoorOpen className="w-3 h-3" /> Total Kamar
+                  </span>
+                  <p className="text-xl font-bold text-blue-800">
+                    {selectedHotel.jmlh_kamar}
+                  </p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                  <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 mb-1">
+                    <BedDouble className="w-3 h-3" /> Total Tempat Tidur
+                  </span>
+                  <p className="text-xl font-bold text-emerald-800">
+                    {selectedHotel.jmlh_tmpt_tdur}
+                  </p>
+                </div>
+              </div>
+
+              {/* Daftar Tipe Kamar */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                  Daftar Tipe Kamar & Harga
+                </h4>
+                {selectedHotel.tipe_kamars &&
+                selectedHotel.tipe_kamars.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {selectedHotel.tipe_kamars.map((tk) => (
+                      <div
+                        key={tk.tipekamar_id}
+                        className="flex flex-col p-3 rounded-lg border border-slate-100 bg-slate-50 hover:bg-white hover:shadow-sm hover:border-blue-200 transition-all"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-sm font-semibold text-slate-800 capitalize">
+                            {tk.nama_tipekamar.replace(/_/g, ' ')}
+                          </span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                              tk.kategori_kamar === 'suite'
+                                ? 'bg-purple-100 text-purple-700 border-purple-200'
+                                : 'bg-slate-200 text-slate-600 border-slate-300'
+                            }`}
+                          >
+                            {tk.kategori_kamar === 'suite'
+                              ? 'Suite'
+                              : 'Non-Suite'}
+                          </span>
+                        </div>
+                        <div className="mt-auto flex items-center gap-1 text-slate-600 text-xs font-medium">
+                          <Banknote className="w-3.5 h-3.5 text-green-600" />
+                          {formatRupiah(tk.harga_kamar)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 italic">
+                    Belum ada data tipe kamar.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* --- Tabel Input Utama --- */}
       {selectedHotelId ? (
         isLoadingReport ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
+            <p className="text-slate-500">Memuat data laporan...</p>
           </div>
         ) : (
-          <EntryTable
-            month={month}
-            year={year}
-            onDataChange={setReportData}
-            existingData={existingData}
-          />
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <EntryTable
+              month={month}
+              year={year}
+              onDataChange={setReportData}
+              existingData={existingData}
+              hotelCapacity={selectedHotel?.jmlh_kamar || 0}
+            />
+          </div>
         )
       ) : (
-        <div className="text-center py-20 bg-slate-50 rounded-lg border border-dashed border-slate-300">
-          <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-slate-900">
-            No Hotel Selected
+        <div className="text-center py-24 bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center">
+          <div className="p-4 bg-white rounded-full shadow-sm mb-4">
+            <Building2 className="w-10 h-10 text-slate-400" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-800">
+            Belum Ada Hotel Dipilih
           </h3>
-          <p className="text-slate-500">
-            Please select a hotel above to start entering data.
+          <p className="text-slate-500 mt-2 max-w-sm mx-auto">
+            Silakan pilih hotel pada menu di atas untuk mulai memasukkan atau
+            mengedit data laporan.
           </p>
         </div>
       )}

@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Calculator } from 'lucide-react';
 
-// Helper to generate days in a month
+// Helper untuk mendapatkan jumlah hari dalam sebulan
 const getDaysInMonth = (month, year) => {
   return new Date(year, month + 1, 0).getDate();
 };
 
-const EntryTable = ({ month, year, onDataChange, existingData }) => {
-  // Track previous props to detect changes during render
+const EntryTable = ({
+  month,
+  year,
+  onDataChange,
+  existingData,
+  hotelCapacity,
+}) => {
+  // ... (State dan logika existing tidak berubah sampai useMemo) ...
   const [prevMonth, setPrevMonth] = useState(month);
   const [prevYear, setPrevYear] = useState(year);
   const [prevExistingData, setPrevExistingData] = useState(null);
@@ -18,7 +24,6 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
     local: 0,
   });
 
-  // Main state for table data
   const [movements, setMovements] = useState(() =>
     Array.from({ length: getDaysInMonth(month, year) }, () => ({
       roomsIn: 0,
@@ -30,16 +35,12 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
     }))
   );
 
-  // --- ADJUST STATE DURING RENDER PATTERN ---
-  // If inputs change (month/year) OR we receive new data from backend
   if (
     month !== prevMonth ||
     year !== prevYear ||
     existingData !== prevExistingData
   ) {
     const newDays = getDaysInMonth(month, year);
-
-    // 1. Prepare blank movements
     let newMovements = Array.from({ length: newDays }, () => ({
       roomsIn: 0,
       roomsOut: 0,
@@ -48,21 +49,16 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
       localIn: 0,
       localOut: 0,
     }));
-
-    // 2. Prepare default initial values (start of month)
     let newInitialValues = { rooms: 0, foreign: 0, local: 0 };
 
-    // 3. Fill with existing data if available
     if (
       existingData &&
       Array.isArray(existingData) &&
       existingData.length > 0
     ) {
       existingData.forEach((record) => {
-        // Parse date from DB string
         const dateObj = new Date(record.tanggal_laporan);
-        const dayIndex = dateObj.getUTCDate() - 1; // 0-indexed
-
+        const dayIndex = dateObj.getUTCDate() - 1;
         if (dayIndex >= 0 && dayIndex < newDays) {
           newMovements[dayIndex] = {
             roomsIn: record.kamar_checkin,
@@ -75,13 +71,9 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
         }
       });
 
-      // 4. Reverse calculate "Initial" (Yesterday of Day 1)
-      // Logic: Today = Yesterday + In - Out
-      // Therefore: Yesterday = Today - In + Out
       const day1 = existingData.find(
         (d) => new Date(d.tanggal_laporan).getUTCDate() === 1
       );
-
       if (day1) {
         newInitialValues = {
           rooms:
@@ -98,7 +90,6 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
       }
     }
 
-    // Update state synchronously to avoid flash
     setPrevMonth(month);
     setPrevYear(year);
     setPrevExistingData(existingData);
@@ -106,9 +97,9 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
     setInitialValues(newInitialValues);
   }
 
-  // Handle Input Changes
   const handleMovementChange = (dayIndex, field, value) => {
-    const numValue = parseInt(value) || 0;
+    let numValue = value === '' ? 0 : parseInt(value);
+    if (isNaN(numValue)) numValue = 0;
     setMovements((prev) => {
       const newMovements = [...prev];
       newMovements[dayIndex] = { ...newMovements[dayIndex], [field]: numValue };
@@ -117,28 +108,24 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
   };
 
   const handleInitialChange = (field, value) => {
-    const numValue = parseInt(value) || 0;
+    let numValue = value === '' ? 0 : parseInt(value);
+    if (isNaN(numValue)) numValue = 0;
     setInitialValues((prev) => ({ ...prev, [field]: numValue }));
   };
 
-  // --- Chain Calculation Logic ---
+  // --- 1. Hitung Data Harian (Calculated Data) ---
   const calculatedData = useMemo(() => {
     const results = [];
-
-    // Initialize running totals with Day 1 "Yesterday" values
     let currentRooms = initialValues.rooms;
     let currentForeign = initialValues.foreign;
     let currentLocal = initialValues.local;
 
     for (let i = 0; i < movements.length; i++) {
       const move = movements[i];
-
-      // Snapshot "Yesterday" (Start of Day)
       const yesterdayRooms = currentRooms;
       const yesterdayForeign = currentForeign;
       const yesterdayLocal = currentLocal;
 
-      // Calculate "Hari Ini" (End of Day)
       const todayRooms = yesterdayRooms + move.roomsIn - move.roomsOut;
       const todayForeign = yesterdayForeign + move.foreignIn - move.foreignOut;
       const todayLocal = yesterdayLocal + move.localIn - move.localOut;
@@ -154,247 +141,352 @@ const EntryTable = ({ month, year, onDataChange, existingData }) => {
         todayLocal,
       });
 
-      // Update accumulators for next iteration
       currentRooms = todayRooms;
       currentForeign = todayForeign;
       currentLocal = todayLocal;
     }
-
     return results;
   }, [initialValues, movements]);
 
-  // Pass data back to parent
+  // --- 2. Hitung Total Kolom (Untuk Footer) ---
+  const totals = useMemo(() => {
+    return calculatedData.reduce(
+      (acc, curr) => ({
+        roomsIn: acc.roomsIn + curr.roomsIn,
+        roomsOut: acc.roomsOut + curr.roomsOut,
+        todayRooms: acc.todayRooms + curr.todayRooms, // Room Nights (Malam Kamar Terpakai)
+
+        foreignIn: acc.foreignIn + curr.foreignIn,
+        foreignOut: acc.foreignOut + curr.foreignOut,
+        todayForeign: acc.todayForeign + curr.todayForeign, // Guest Nights (Malam Tamu Asing)
+
+        localIn: acc.localIn + curr.localIn,
+        localOut: acc.localOut + curr.localOut,
+        todayLocal: acc.todayLocal + curr.todayLocal, // Guest Nights (Malam Tamu Lokal)
+      }),
+      {
+        roomsIn: 0,
+        roomsOut: 0,
+        todayRooms: 0,
+        foreignIn: 0,
+        foreignOut: 0,
+        todayForeign: 0,
+        localIn: 0,
+        localOut: 0,
+        todayLocal: 0,
+      }
+    );
+  }, [calculatedData]);
+
+  // Hitung TPK (Tingkat Penghunian Kamar)
+  // Rumus: (Total Malam Kamar Terpakai / (Jumlah Kamar Tersedia x Jumlah Hari)) * 100
+  const occupancyRate = useMemo(() => {
+    if (!hotelCapacity || hotelCapacity === 0) return 0;
+    const totalAvailable = hotelCapacity * getDaysInMonth(month, year);
+    return ((totals.todayRooms / totalAvailable) * 100).toFixed(2);
+  }, [totals.todayRooms, hotelCapacity, month, year]);
+
   useEffect(() => {
     onDataChange(calculatedData);
   }, [calculatedData, onDataChange]);
 
   return (
-    <div className="w-full border rounded-lg shadow-sm bg-white overflow-hidden flex flex-col font-montserrat">
-      <div className="p-4 bg-yellow-50 border-b border-yellow-100 flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-        <div className="text-sm text-yellow-800">
-          <p className="font-medium">Information</p>
-          <p>
-            Columns "Kemarin" (Yesterday) are calculated automatically based on
-            the previous day's data.
-          </p>
-          <p>
-            For <strong>Date 1</strong>, please enter the values manually (from
-            the last day of the previous month).
-          </p>
+    <div className="w-full border border-slate-200 rounded-xl shadow-sm bg-white overflow-hidden flex flex-col font-montserrat">
+      {/* Info Header */}
+      <div className="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center gap-4 flex-wrap">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-sm text-amber-800">
+            <p className="font-bold">Informasi Pengisian</p>
+            <p className="text-xs opacity-90">
+              Kolom "Kemarin" dihitung otomatis. Tanggal 1 isi manual.
+            </p>
+          </div>
         </div>
+
+        {/* Tampilan TPK Sederhana di Atas */}
+        {hotelCapacity > 0 && (
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-amber-200 shadow-sm">
+            <Calculator className="w-4 h-4 text-blue-600" />
+            <div className="text-sm">
+              <span className="text-slate-500 mr-2">Est. TPK:</span>
+              <span
+                className={`font-bold ${
+                  occupancyRate > 100 ? 'text-red-600' : 'text-blue-700'
+                }`}
+              >
+                {occupancyRate}%
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="overflow-x-auto flex-1">
-        <table className="w-full text-sm text-left border-collapse">
-          <thead className="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10">
+      <div className="overflow-x-auto flex-1 custom-scrollbar max-h-[600px]">
+        <table className="w-full text-sm text-left border-collapse relative">
+          <thead className="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0 z-20 shadow-sm">
+            {/* ... (Header Table Sama Seperti Sebelumnya) ... */}
             <tr>
               <th
                 rowSpan="2"
-                className="px-4 py-3 border sticky left-0 bg-gray-100 z-20 w-16 text-center shadow-[1px_0_0_0_rgba(0,0,0,0.1)]"
+                className="px-4 py-3 border-r border-b border-slate-200 sticky left-0 bg-slate-100 z-30 w-16 text-center"
               >
                 Tgl
               </th>
               <th
                 colSpan="4"
-                className="px-4 py-2 border text-center bg-blue-50 text-blue-800"
+                className="px-4 py-2 border-r border-b border-blue-200 text-center bg-blue-50 text-blue-800 font-bold tracking-wider"
               >
-                Kamar (Rooms)
+                Kamar
               </th>
               <th
                 colSpan="4"
-                className="px-4 py-2 border text-center bg-green-50 text-green-800"
+                className="px-4 py-2 border-r border-b border-emerald-200 text-center bg-emerald-50 text-emerald-800 font-bold tracking-wider"
               >
-                Pengunjung Asing (Intl)
+                Mancanegara
               </th>
               <th
                 colSpan="4"
-                className="px-4 py-2 border text-center bg-purple-50 text-purple-800"
+                className="px-4 py-2 border-b border-purple-200 text-center bg-purple-50 text-purple-800 font-bold tracking-wider"
               >
-                Pengunjung Indonesia (Local)
+                Domestik
               </th>
             </tr>
             <tr>
               {/* Kamar */}
-              <th className="px-2 py-2 border text-center min-w-[80px] text-gray-500 font-medium">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Kemarin
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px]">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Masuk
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px]">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Keluar
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px] bg-blue-50 font-bold">
-                Ditempati
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-blue-50 font-bold text-blue-900">
+                Terisi
               </th>
-
               {/* Asing */}
-              <th className="px-2 py-2 border text-center min-w-[80px] text-gray-500 font-medium">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Kemarin
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px]">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Masuk
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px]">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Keluar
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px] bg-green-50 font-bold">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-emerald-50 font-bold text-emerald-900">
                 Menetap
               </th>
-
-              {/* Local */}
-              <th className="px-2 py-2 border text-center min-w-[80px] text-gray-500 font-medium">
+              {/* Lokal */}
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Kemarin
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px]">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Masuk
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px]">
+              <th className="px-2 py-2 border-r border-b text-center min-w-[70px] bg-white">
                 Keluar
               </th>
-              <th className="px-2 py-2 border text-center min-w-[80px] bg-purple-50 font-bold">
+              <th className="px-2 py-2 border-b text-center min-w-[70px] bg-purple-50 font-bold text-purple-900">
                 Menetap
               </th>
             </tr>
           </thead>
-          <tbody>
+
+          <tbody className="divide-y divide-slate-100">
             {calculatedData.map((row, index) => (
               <tr
                 key={index}
-                className="hover:bg-slate-50 border-b last:border-0"
+                className="hover:bg-slate-50 transition-colors group"
               >
-                <td className="px-4 py-2 font-medium text-center border-r sticky left-0 bg-white z-10 shadow-[1px_0_0_0_rgba(0,0,0,0.1)]">
+                <td className="px-4 py-2 font-semibold text-center border-r border-slate-200 sticky left-0 bg-white group-hover:bg-slate-50 z-10">
                   {row.date}
                 </td>
 
-                {/* --- Kamar --- */}
-                <td className="p-1 border text-center bg-gray-50">
+                {/* Kamar */}
+                <td className="p-1 border-r text-center text-slate-400 text-xs">
                   {index === 0 ? (
                     <input
                       type="number"
-                      className="w-full h-8 px-1 text-center bg-white border border-yellow-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      value={initialValues.rooms}
+                      className="w-full text-center border-amber-300 rounded bg-amber-50"
+                      value={initialValues.rooms || ''}
                       onChange={(e) =>
                         handleInitialChange('rooms', e.target.value)
                       }
                     />
                   ) : (
-                    <span className="text-gray-500">{row.yesterdayRooms}</span>
+                    row.yesterdayRooms
                   )}
                 </td>
-                <td className="p-1 border">
+                <td className="p-1 border-r">
                   <input
                     type="number"
                     min="0"
-                    className="w-full h-8 text-center border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50 focus:bg-white transition-colors"
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border-slate-200 rounded focus:ring-blue-500 bg-white"
                     value={row.roomsIn || ''}
                     onChange={(e) =>
                       handleMovementChange(index, 'roomsIn', e.target.value)
                     }
                   />
                 </td>
-                <td className="p-1 border">
+                <td className="p-1 border-r">
                   <input
                     type="number"
                     min="0"
-                    className="w-full h-8 text-center border-gray-200 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50 focus:bg-white transition-colors"
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border-slate-200 rounded focus:ring-blue-500 bg-white"
                     value={row.roomsOut || ''}
                     onChange={(e) =>
                       handleMovementChange(index, 'roomsOut', e.target.value)
                     }
                   />
                 </td>
-                <td className="px-2 py-1 border text-center font-bold text-blue-700 bg-blue-50">
+                <td className="px-2 py-1 border-r text-center font-bold text-blue-700 bg-blue-50/30">
                   {row.todayRooms}
                 </td>
 
-                {/* --- Asing --- */}
-                <td className="p-1 border text-center bg-gray-50">
+                {/* Asing */}
+                <td className="p-1 border-r text-center text-slate-400 text-xs">
                   {index === 0 ? (
                     <input
                       type="number"
-                      className="w-full h-8 px-1 text-center bg-white border border-yellow-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      value={initialValues.foreign}
+                      className="w-full text-center border-amber-300 rounded bg-amber-50"
+                      value={initialValues.foreign || ''}
                       onChange={(e) =>
                         handleInitialChange('foreign', e.target.value)
                       }
                     />
                   ) : (
-                    <span className="text-gray-500">
-                      {row.yesterdayForeign}
-                    </span>
+                    row.yesterdayForeign
                   )}
                 </td>
-                <td className="p-1 border">
+                <td className="p-1 border-r">
                   <input
                     type="number"
                     min="0"
-                    className="w-full h-8 text-center border-gray-200 rounded focus:ring-2 focus:ring-green-500 focus:outline-none bg-slate-50 focus:bg-white transition-colors"
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border-slate-200 rounded focus:ring-emerald-500 bg-white"
                     value={row.foreignIn || ''}
                     onChange={(e) =>
                       handleMovementChange(index, 'foreignIn', e.target.value)
                     }
                   />
                 </td>
-                <td className="p-1 border">
+                <td className="p-1 border-r">
                   <input
                     type="number"
                     min="0"
-                    className="w-full h-8 text-center border-gray-200 rounded focus:ring-2 focus:ring-green-500 focus:outline-none bg-slate-50 focus:bg-white transition-colors"
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border-slate-200 rounded focus:ring-emerald-500 bg-white"
                     value={row.foreignOut || ''}
                     onChange={(e) =>
                       handleMovementChange(index, 'foreignOut', e.target.value)
                     }
                   />
                 </td>
-                <td className="px-2 py-1 border text-center font-bold text-green-700 bg-green-50">
+                <td className="px-2 py-1 border-r text-center font-bold text-emerald-700 bg-emerald-50/30">
                   {row.todayForeign}
                 </td>
 
-                {/* --- Local --- */}
-                <td className="p-1 border text-center bg-gray-50">
+                {/* Lokal */}
+                <td className="p-1 border-r text-center text-slate-400 text-xs">
                   {index === 0 ? (
                     <input
                       type="number"
-                      className="w-full h-8 px-1 text-center bg-white border border-yellow-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      value={initialValues.local}
+                      className="w-full text-center border-amber-300 rounded bg-amber-50"
+                      value={initialValues.local || ''}
                       onChange={(e) =>
                         handleInitialChange('local', e.target.value)
                       }
                     />
                   ) : (
-                    <span className="text-gray-500">{row.yesterdayLocal}</span>
+                    row.yesterdayLocal
                   )}
                 </td>
-                <td className="p-1 border">
+                <td className="p-1 border-r">
                   <input
                     type="number"
                     min="0"
-                    className="w-full h-8 text-center border-gray-200 rounded focus:ring-2 focus:ring-purple-500 focus:outline-none bg-slate-50 focus:bg-white transition-colors"
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border-slate-200 rounded focus:ring-purple-500 bg-white"
                     value={row.localIn || ''}
                     onChange={(e) =>
                       handleMovementChange(index, 'localIn', e.target.value)
                     }
                   />
                 </td>
-                <td className="p-1 border">
+                <td className="p-1 border-r">
                   <input
                     type="number"
                     min="0"
-                    className="w-full h-8 text-center border-gray-200 rounded focus:ring-2 focus:ring-purple-500 focus:outline-none bg-slate-50 focus:bg-white transition-colors"
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border-slate-200 rounded focus:ring-purple-500 bg-white"
                     value={row.localOut || ''}
                     onChange={(e) =>
                       handleMovementChange(index, 'localOut', e.target.value)
                     }
                   />
                 </td>
-                <td className="px-2 py-1 border text-center font-bold text-purple-700 bg-purple-50">
+                <td className="px-2 py-1 border-r-0 text-center font-bold text-purple-700 bg-purple-50/30">
                   {row.todayLocal}
                 </td>
               </tr>
             ))}
           </tbody>
+
+          {/* --- FOOTER TOTAL --- */}
+          <tfoot className="sticky bottom-0 z-30 bg-slate-100 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] border-t-2 border-slate-300 font-bold text-slate-800 text-xs uppercase">
+            <tr>
+              <td className="px-4 py-3 text-center border-r border-slate-300 sticky left-0 bg-slate-100 z-40">
+                TOTAL
+              </td>
+
+              {/* Kamar Total */}
+              <td className="px-2 py-2 border-r bg-slate-50 text-center text-slate-400">
+                -
+              </td>
+              <td className="px-2 py-2 border-r bg-blue-100 text-center text-blue-900">
+                {totals.roomsIn}
+              </td>
+              <td className="px-2 py-2 border-r bg-blue-100 text-center text-blue-900">
+                {totals.roomsOut}
+              </td>
+              <td className="px-2 py-2 border-r bg-blue-200 text-center text-blue-900 text-sm">
+                {totals.todayRooms}
+              </td>
+
+              {/* Asing Total */}
+              <td className="px-2 py-2 border-r bg-slate-50 text-center text-slate-400">
+                -
+              </td>
+              <td className="px-2 py-2 border-r bg-emerald-100 text-center text-emerald-900">
+                {totals.foreignIn}
+              </td>
+              <td className="px-2 py-2 border-r bg-emerald-100 text-center text-emerald-900">
+                {totals.foreignOut}
+              </td>
+              <td className="px-2 py-2 border-r bg-emerald-200 text-center text-emerald-900 text-sm">
+                {totals.todayForeign}
+              </td>
+
+              {/* Lokal Total */}
+              <td className="px-2 py-2 border-r bg-slate-50 text-center text-slate-400">
+                -
+              </td>
+              <td className="px-2 py-2 border-r bg-purple-100 text-center text-purple-900">
+                {totals.localIn}
+              </td>
+              <td className="px-2 py-2 border-r bg-purple-100 text-center text-purple-900">
+                {totals.localOut}
+              </td>
+              <td className="px-2 py-2 border-r-0 bg-purple-200 text-center text-purple-900 text-sm">
+                {totals.todayLocal}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>

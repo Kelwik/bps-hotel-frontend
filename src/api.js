@@ -2,6 +2,7 @@ import axios from 'axios';
 import { tokenStore } from './token';
 
 export const api = axios.create({
+  // baseURL: 'http://103.150.197.98/api',
   baseURL: 'http://localhost:3000/api',
   withCredentials: true,
 });
