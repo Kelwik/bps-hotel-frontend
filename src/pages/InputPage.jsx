@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import EntryTable from '../components/EntryTable';
 import StatusModal from '../components/StatusModal';
+import * as XLSX from 'xlsx'; // Import XLSX
 import {
   Save,
   Building2,
@@ -14,6 +15,7 @@ import {
   DoorOpen,
   Banknote,
   Info,
+  Download, // Import Download Icon
 } from 'lucide-react';
 
 // Daftar nama bulan dalam Bahasa Indonesia
@@ -125,6 +127,84 @@ function InputPage() {
     saveMutation.mutate(payload);
   };
 
+  // --- EXPORT TO EXCEL FUNCTION ---
+  const handleExportExcel = () => {
+    if (!reportData || reportData.length === 0 || !selectedHotel) return;
+
+    // 1. Prepare Headers (Double Row Header)
+    // Row 1: Group Headers
+    const headerRow1 = [
+      'Tanggal',
+      'Kamar',
+      '',
+      '',
+      '',
+      'Mancanegara',
+      '',
+      '',
+      '',
+      'Domestik',
+      '',
+      '',
+      '',
+    ];
+    // Row 2: Detail Headers
+    const headerRow2 = [
+      '',
+      'Kemarin',
+      'Masuk',
+      'Keluar',
+      'Terisi',
+      'Kemarin',
+      'Masuk',
+      'Keluar',
+      'Menetap',
+      'Kemarin',
+      'Masuk',
+      'Keluar',
+      'Menetap',
+    ];
+
+    // 2. Map Data Rows
+    const dataRows = reportData.map((row) => [
+      row.date,
+      row.yesterdayRooms,
+      row.roomsIn,
+      row.roomsOut,
+      row.todayRooms,
+      row.yesterdayForeign,
+      row.foreignIn,
+      row.foreignOut,
+      row.todayForeign,
+      row.yesterdayLocal,
+      row.localIn,
+      row.localOut,
+      row.todayLocal,
+    ]);
+
+    // 3. Create Worksheet from Array of Arrays
+    const ws = XLSX.utils.aoa_to_sheet([headerRow1, headerRow2, ...dataRows]);
+
+    // 4. Define Merges
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }, // Tanggal (Merge Vertical)
+      { s: { r: 0, c: 1 }, e: { r: 0, c: 4 } }, // Kamar (Merge Horizontal)
+      { s: { r: 0, c: 5 }, e: { r: 0, c: 8 } }, // Mancanegara (Merge Horizontal)
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 12 } }, // Domestik (Merge Horizontal)
+    ];
+
+    // 5. Create Workbook and Download
+    const wb = XLSX.utils.book_new();
+    const sheetName = 'Laporan Bulanan';
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+    const fileName = `Laporan_${selectedHotel.nama_hotel.replace(
+      /\s+/g,
+      '_'
+    )}_${INDONESIAN_MONTHS[month]}_${year}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   const closeModal = () => setModalState({ ...modalState, isOpen: false });
 
   // Formatter Rupiah
@@ -165,18 +245,31 @@ function InputPage() {
             </p>
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saveMutation.isPending || !selectedHotelId}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            Simpan Data
-          </button>
+          <div className="flex gap-3">
+            {/* Tombol Export Excel */}
+            <button
+              onClick={handleExportExcel}
+              disabled={!selectedHotelId || reportData.length === 0}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              Export Excel
+            </button>
+
+            {/* Tombol Simpan */}
+            <button
+              onClick={handleSave}
+              disabled={saveMutation.isPending || !selectedHotelId}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              Simpan Data
+            </button>
+          </div>
         </div>
 
         {/* --- Filters --- */}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
+import * as XLSX from 'xlsx'; // Import XLSX
 import {
   AlertTriangle,
   Trash2,
@@ -82,6 +83,55 @@ function TabelDinamisPage() {
     }
     // Setting this to true enables the query
     setIsSubmitted(true);
+  };
+
+  // --- EXPORT FUNCTION ---
+  const handleExportExcel = () => {
+    if (!tableData || tableData.length === 0) return;
+
+    // Retrieve Labels for Headers
+    const rowHeaderLabel =
+      ROW_HEADERS.find((r) => r.id === selectedRowHeader)?.label ||
+      'Keterangan';
+    const indicatorLabel =
+      INDICATORS.find((i) => i.id === selectedIndicator)?.label || 'Nilai';
+
+    // Build Header 1: [Row Header Label, Indicator Label (to be merged), ...placeholders]
+    const header1 = [rowHeaderLabel, indicatorLabel];
+    // Add empty strings for the years to allow merging later
+    for (let i = 1; i < selectedYears.length; i++) {
+      header1.push('');
+    }
+
+    // Build Header 2: ["", Year 1, Year 2, ...]
+    const header2 = ['', ...selectedYears];
+
+    // Build Data Rows
+    const rows = tableData.map((row) => {
+      const rowData = [row.label];
+      selectedYears.forEach((year) => {
+        // Handle potential null/undefined values
+        const val = row.values[year];
+        rowData.push(val !== undefined && val !== null ? val : '-');
+      });
+      return rowData;
+    });
+
+    // Create Worksheet
+    const ws = XLSX.utils.aoa_to_sheet([header1, header2, ...rows]);
+
+    // Define Merges
+    ws['!merges'] = [
+      // Merge Row Header Label (Vertical)
+      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+      // Merge Indicator Label (Horizontal across years)
+      { s: { r: 0, c: 1 }, e: { r: 0, c: selectedYears.length } },
+    ];
+
+    // Create Workbook and Download
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Statistik Data');
+    XLSX.writeFile(wb, `Statistik_${selectedIndicator}_Export.xlsx`);
   };
 
   return (
@@ -281,7 +331,10 @@ function TabelDinamisPage() {
                   </span>
                 </label>
               </div>
-              <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+              >
                 <Download className="w-4 h-4" /> Unduh Excel
               </button>
             </div>

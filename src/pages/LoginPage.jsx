@@ -221,12 +221,14 @@ const LoginPage = () => {
             </div>
 
             <div className="flex items-center justify-center mt-6">
-              <a
-                href="#"
-                className="text-xs text-bpsBlue font-semibold hover:text-bpsBlue-dark hover:underline transition-colors"
-              >
-                Lupa kata sandi?
-              </a>
+              {mutation.isError ? (
+                <p className="text-xs text-red-400 font-semibold">
+                  {mutation.error.response?.data?.message ||
+                    'Terjadi kesalahan saat melakukan login'}
+                </p>
+              ) : (
+                ''
+              )}
             </div>
           </form>
 
